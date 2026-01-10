@@ -8,7 +8,7 @@ import hashlib
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from dotenv import load_dotenv
@@ -21,10 +21,13 @@ load_dotenv()
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
 
+# 北京时间时区 (UTC+8)
+BEIJING_TZ = timezone(timedelta(hours=8))
+
 
 def get_local_time_str() -> str:
-	"""获取本地时间字符串（格式：YYYY-MM-DD HH:MM:SS）"""
-	return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+	"""获取北京时间字符串（格式：YYYY-MM-DD HH:MM:SS）"""
+	return datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_balance_hash():
