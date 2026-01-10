@@ -222,7 +222,7 @@ def format_check_in_notification(detail: dict) -> str:
 		格式化后的通知消息
 	"""
 	lines = [
-		f'[CHECK-IN] {detail["name"]}',
+		f'【签到】{detail["name"]}',
 		'  ━━━━━━━━━━━━━━━━━━━━',
 		'  📍 签到前',
 		f'     💵 余额: ${detail["before_quota"]:.2f}  |  📊 累计消耗: ${detail["before_used"]:.2f}',
@@ -239,11 +239,11 @@ def format_check_in_notification(detail: dict) -> str:
 
 		# 已签到但期间有使用
 		if not has_reward and has_usage:
-			lines.append('  ℹ️  今日已签到（期间有使用）')
+			lines.append('  ℹ️  今日已签到（期间有消耗）')
 
 		# 签到获得
 		if has_reward:
-			lines.append(f'  🎁 签到获得: +${detail["check_in_reward"]:.2f}')
+			lines.append(f'  🎁 签到奖励: +${detail["check_in_reward"]:.2f}')
 
 		# 期间消耗
 		if has_usage:
@@ -253,12 +253,12 @@ def format_check_in_notification(detail: dict) -> str:
 		if detail['balance_change'] != 0:
 			change_symbol = '+' if detail['balance_change'] > 0 else ''
 			change_emoji = '📈' if detail['balance_change'] > 0 else '📉'
-			lines.append(f'  {change_emoji} 余额变化: {change_symbol}${detail["balance_change"]:.2f}')
+			lines.append(f'  {change_emoji} 余额变动: {change_symbol}${detail["balance_change"]:.2f}')
 	else:
 		# 无任何变化
 		lines.extend([
 			'  ━━━━━━━━━━━━━━━━━━━━',
-			'  ℹ️  今日已签到，无变化'
+			'  ℹ️  今日已签到，暂无变化'
 		])
 
 	return '\n'.join(lines)
@@ -461,24 +461,24 @@ async def main():
 	if need_notify and notification_content:
 		# 构建通知内容
 		summary = [
-			'[STATS] Check-in result statistics:',
-			f'[SUCCESS] Success: {success_count}/{total_count}',
-			f'[FAIL] Failed: {total_count - success_count}/{total_count}',
+			'【统计】签到结果统计：',
+			f'✅ 成功: {success_count}/{total_count}',
+			f'❌ 失败: {total_count - success_count}/{total_count}',
 		]
 
 		if success_count == total_count:
-			summary.append('[SUCCESS] All accounts check-in successful!')
+			summary.append('🎉 全部账号签到成功！')
 		elif success_count > 0:
-			summary.append('[WARN] Some accounts check-in successful')
+			summary.append('⚠️ 部分账号签到成功')
 		else:
-			summary.append('[ERROR] All accounts check-in failed')
+			summary.append('❗全部账号签到失败')
 
-		time_info = f'[TIME] Execution time: {get_local_time_str()}'
+		time_info = f'⏰ 执行时间: {get_local_time_str()}'
 
 		notify_content = '\n\n'.join([time_info, '\n'.join(notification_content), '\n'.join(summary)])
 
 		print(notify_content)
-		notify.push_message('AnyRouter Check-in Alert', notify_content, msg_type='text')
+		notify.push_message('AnyRouter 签到通知', notify_content, msg_type='text')
 		print('[NOTIFY] Notification sent due to failures or balance changes')
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
