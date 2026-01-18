@@ -465,8 +465,7 @@ async def main():
 		# 构建通知内容
 		summary = [
 			'【统计】签到结果统计：',
-			f'✅ 成功: {success_count}/{total_count}',
-			f'❌ 失败: {total_count - success_count}/{total_count}',
+			f'✅ 成功: {success_count}/{total_count}  |  ❌ 失败: {total_count - success_count}/{total_count}',
 		]
 
 		if success_count == total_count:
