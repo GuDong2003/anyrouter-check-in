@@ -478,7 +478,7 @@ async def main():
 
 		time_info = f'⏰ 执行时间: {get_local_time_str()}'
 
-		notify_content = '\n\n'.join([time_info, '\n'.join(notification_content), '\n'.join(summary)])
+		notify_content = '\n\n'.join([time_info, '\n\n'.join(notification_content), '\n'.join(summary)])
 
 		print(notify_content)
 		notify.push_message('AnyRouter 签到通知', notify_content, msg_type='text')
