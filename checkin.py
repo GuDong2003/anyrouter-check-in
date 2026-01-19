@@ -337,6 +337,13 @@ async def main():
 	print('[SYSTEM] AnyRouter.top multi-account auto check-in script started (using Playwright)')
 	print(f'[TIME] Execution time: {get_local_time_str()}')
 
+	# 检测是否是手动运行（GitHub Actions workflow_dispatch 事件）
+	is_manual_run = os.getenv('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+	if is_manual_run:
+		print('[INFO] Manual run detected, will send notification regardless of balance changes')
+	else:
+		print('[INFO] Scheduled run detected, will only send notification if balance changes or failures occur')
+
 	app_config = AppConfig.load_from_env()
 	print(f'[INFO] Loaded {len(app_config.providers)} provider configuration(s)')
 
@@ -442,8 +449,17 @@ async def main():
 		else:
 			print('[INFO] No balance changes detected')
 
-	# 为有余额变化的情况添加所有成功账号到通知内容
-	if balance_changed:
+	# 手动运行时，无论余额是否变化都发送通知
+	if is_manual_run:
+		need_notify = True
+		if not balance_changed:
+			print('[NOTIFY] Manual run detected, will send notification even without balance changes')
+
+	# 如果不是手动运行且余额没有变化，则不发送通知（除非有失败）
+	# 失败的情况已经在前面设置了 need_notify = True
+
+	# 为有余额变化或手动运行的情况添加所有成功账号到通知内容
+	if balance_changed or is_manual_run:
 		for i, account in enumerate(accounts):
 			account_key = f'account_{i + 1}'
 			if account_key in account_check_in_details:
