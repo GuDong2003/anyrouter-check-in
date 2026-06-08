@@ -370,6 +370,91 @@ def format_check_in_notification(detail: dict) -> str:
 	return '\n'.join(lines)
 
 
+def format_signed_money(amount: float) -> str:
+	"""格式化带符号金额。"""
+	prefix = '+' if amount > 0 else ''
+	return f'{prefix}${amount:.2f}'
+
+
+def get_github_run_url() -> str | None:
+	"""获取当前 GitHub Actions 运行链接。"""
+	github_run_id = os.getenv('GITHUB_RUN_ID', '').strip()
+	github_repo = os.getenv('GITHUB_REPOSITORY', '').strip()
+	if github_run_id and github_repo:
+		return f'https://github.com/{github_repo}/actions/runs/{github_run_id}'
+	return None
+
+
+def get_trigger_label() -> str:
+	"""获取本次运行触发方式。"""
+	event_name = os.getenv('GITHUB_EVENT_NAME', '').strip()
+	if event_name == 'workflow_dispatch':
+		return '手动运行'
+	if event_name == 'schedule':
+		return '定时任务'
+	if event_name:
+		return event_name
+	return '本地运行'
+
+
+def format_notification_header(push_reasons: list[str]) -> str:
+	"""格式化通知顶部元信息。"""
+	unique_reasons = list(dict.fromkeys(push_reasons))
+	reason_text = '、'.join(unique_reasons) if unique_reasons else '状态更新'
+	lines = [
+		f'⏰ 执行时间：{get_local_time_str()}',
+		f'🚀 触发方式：{get_trigger_label()}',
+		f'📣 推送原因：{reason_text}',
+	]
+	run_url = get_github_run_url()
+	if run_url:
+		lines.append(f'🔗 运行记录：{run_url}')
+	return '\n'.join(lines)
+
+
+def format_failure_notification(account_name: str, reason: str | None = None) -> str:
+	"""格式化失败账号通知。"""
+	failure_reason = (reason or '未知错误').strip()
+	return '\n'.join([
+		f'❌ {account_name}',
+		f'原因：{failure_reason}',
+		'建议：检查 COOKIE / 邮箱密码 / 代理订阅，必要时开启 DEBUG_MODE 查看截图',
+	])
+
+
+def format_overall_summary(success_count: int, total_count: int, account_details: dict[str, dict]) -> str:
+	"""格式化多账号汇总信息。"""
+	failed_count = total_count - success_count
+	lines = [
+		'📊 本次汇总',
+		f'✅ 成功：{success_count}/{total_count}  |  ❌ 失败：{failed_count}/{total_count}',
+	]
+
+	successful_details = [detail for detail in account_details.values() if detail.get('success')]
+	if successful_details:
+		total_before_quota = sum(float(detail['before_quota']) for detail in successful_details)
+		total_after_quota = sum(float(detail['after_quota']) for detail in successful_details)
+		total_reward = sum(float(detail['check_in_reward']) for detail in successful_details)
+		total_usage = sum(float(detail['usage_increase']) for detail in successful_details)
+		total_balance_change = sum(float(detail['balance_change']) for detail in successful_details)
+		change_emoji = '📈' if total_balance_change >= 0 else '📉'
+		lines.extend([
+			f'💰 总余额：${total_before_quota:.2f} → ${total_after_quota:.2f}',
+			f'🎁 总奖励：{format_signed_money(total_reward)}',
+			f'📉 总消耗：${total_usage:.2f}',
+			f'{change_emoji} 净变化：{format_signed_money(total_balance_change)}',
+		])
+
+	if success_count == total_count:
+		lines.append('🎉 全部账号签到成功！')
+	elif success_count > 0:
+		lines.append('⚠️ 部分账号签到成功')
+	else:
+		lines.append('❗全部账号签到失败')
+
+	return '\n'.join(lines)
+
+
 async def check_in_account(account: AccountConfig, account_index: int, app_config: AppConfig):
 	"""为单个账号执行签到操作"""
 	account_name = account.get_display_name(account_index)
@@ -535,10 +620,12 @@ async def main():
 	success_count = 0
 	total_count = len(accounts)
 	notification_content = []
+	failed_notification_content = []
 	current_balances = {}
 	account_check_in_details = {}
 	need_notify = False
 	balance_changed = False
+	first_run = False
 
 	for i, account in enumerate(accounts):
 		account_key = f'account_{i + 1}'
@@ -587,23 +674,24 @@ async def main():
 
 			if should_notify_this_account:
 				account_name = account.get_display_name(i)
-				status = '[SUCCESS]' if success else '[FAIL]'
-				account_result = f'{status} {account_name}'
 				if user_info_after and user_info_after.get('success'):
-					account_result += f'\n{user_info_after["display"]}'
+					failure_reason = '签到失败，但用户信息获取成功'
 				elif user_info_after:
-					account_result += f'\n{user_info_after.get("error", "Unknown error")}'
-				notification_content.append(account_result)
+					failure_reason = user_info_after.get('error', 'Unknown error')
+				else:
+					failure_reason = '登录失败或未获取到用户信息'
+				failed_notification_content.append(format_failure_notification(account_name, failure_reason))
 
 		except Exception as e:
 			account_name = account.get_display_name(i)
 			print(f'[FAILED] {account_name} processing exception: {e}')
 			need_notify = True
-			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
+			failed_notification_content.append(format_failure_notification(account_name, f'处理异常：{str(e)[:50]}...'))
 
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
 	if current_balance_hash:
 		if last_balance_hash is None:
+			first_run = True
 			balance_changed = True
 			need_notify = True
 			print('[NOTIFY] First run detected, will send notification with current balances')
@@ -629,6 +717,8 @@ async def main():
 			account_key = f'account_{i + 1}'
 			if account_key in account_check_in_details:
 				detail = account_check_in_details[account_key]
+				if not detail.get('success'):
+					continue
 				account_name = detail['name']
 
 				# 使用格式化函数生成通知消息
@@ -642,30 +732,31 @@ async def main():
 	if current_balance_hash:
 		save_balance_hash(current_balance_hash)
 
-	if need_notify and notification_content:
-		# 构建通知内容
-		summary = [
-			'【统计】签到结果统计：',
-			f'✅ 成功: {success_count}/{total_count}  |  ❌ 失败: {total_count - success_count}/{total_count}',
-		]
+	if need_notify and (notification_content or failed_notification_content):
+		push_reasons = []
+		if failed_notification_content:
+			push_reasons.append('账号失败')
+		if is_manual_run:
+			push_reasons.append('手动运行')
+		if first_run:
+			push_reasons.append('首次运行')
+		elif balance_changed:
+			push_reasons.append('余额变动')
 
-		if success_count == total_count:
-			summary.append('🎉 全部账号签到成功！')
-		elif success_count > 0:
-			summary.append('⚠️ 部分账号签到成功')
-		else:
-			summary.append('❗全部账号签到失败')
+		sections = [format_notification_header(push_reasons)]
+		if failed_notification_content:
+			sections.append('🚨 异常账号\n' + '\n\n'.join(failed_notification_content))
+		sections.append(format_overall_summary(success_count, total_count, account_check_in_details))
+		if notification_content:
+			sections.append('\n\n'.join(notification_content))
 
-		time_info = f'⏰ 执行时间: {get_local_time_str()}'
-
-		notify_content = '\n\n'.join([time_info, '\n\n'.join(notification_content), '\n'.join(summary)])
+		notify_content = '\n\n'.join(sections)
 		screenshot_paths = take_pending_screenshots() if is_debug_enabled() else []
 		if screenshot_paths:
 			github_run_id = os.getenv('GITHUB_RUN_ID', '').strip()
-			github_repo = os.getenv('GITHUB_REPOSITORY', '').strip()
 			screenshot_hint = f'📸 已保存 {len(screenshot_paths)} 张调试截图'
-			if github_run_id and github_repo:
-				run_url = f'https://github.com/{github_repo}/actions/runs/{github_run_id}'
+			run_url = get_github_run_url()
+			if github_run_id and run_url:
 				screenshot_hint += f'，可在 GitHub Actions artifact `checkin-screenshots-{github_run_id}` 下载：{run_url}'
 			else:
 				screenshot_hint += '，路径：`checkin_screenshots/`'
@@ -673,7 +764,7 @@ async def main():
 
 		print(notify_content)
 		notify.push_message('AnyRouter 签到通知', notify_content, msg_type='text')
-		print('[NOTIFY] Notification sent due to failures or balance changes')
+		print('[NOTIFY] Notification sent due to failures, manual run, or balance changes')
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
 
