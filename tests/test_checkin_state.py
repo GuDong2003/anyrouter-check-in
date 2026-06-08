@@ -5,6 +5,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from checkin import (
+	format_check_in_notification,
 	format_failure_notification,
 	format_notification_header,
 	format_overall_summary,
@@ -47,16 +48,17 @@ def test_github_run_url(monkeypatch):
 	assert get_github_run_url() == 'https://github.com/GuDong2003/anyrouter-check-in/actions/runs/123456'
 
 
-def test_notification_header_includes_trigger_reason_and_run_link(monkeypatch):
+def test_notification_header_only_includes_execution_time(monkeypatch):
 	monkeypatch.setenv('GITHUB_EVENT_NAME', 'workflow_dispatch')
 	monkeypatch.setenv('GITHUB_REPOSITORY', 'GuDong2003/anyrouter-check-in')
 	monkeypatch.setenv('GITHUB_RUN_ID', '123456')
 
-	header = format_notification_header(['手动运行', '余额变动', '手动运行'])
+	header = format_notification_header()
 
-	assert '🚀 触发方式：手动运行' in header
-	assert '📣 推送原因：手动运行、余额变动' in header
-	assert '🔗 运行记录：https://github.com/GuDong2003/anyrouter-check-in/actions/runs/123456' in header
+	assert header.startswith('⏰ 执行时间：')
+	assert '🚀 触发方式' not in header
+	assert '📣 推送原因' not in header
+	assert '🔗 运行记录' not in header
 
 
 def test_overall_summary_calculates_totals():
@@ -99,3 +101,58 @@ def test_failure_notification_contains_reason_and_hint():
 	assert '❌ 账号 A' in message
 	assert '原因：登录失败' in message
 	assert '建议：检查 COOKIE / 邮箱密码 / 代理订阅' in message
+
+
+def test_check_in_notification_compacts_no_change():
+	message = format_check_in_notification({
+		'name': 'Any Router - GuDong',
+		'before_quota': 2760.45,
+		'before_used': 914.55,
+		'after_quota': 2760.45,
+		'after_used': 914.55,
+		'check_in_reward': 0,
+		'usage_increase': 0,
+		'balance_change': 0,
+	})
+
+	assert message == '\n'.join([
+		'【签到】Any Router - GuDong',
+		'  ━━━━━━━━━━━━━━━━━━━━',
+		'     💵 余额: $2760.45  ｜  📊 累计消耗: $914.55',
+		'  ━━━━━━━━━━━━━━━━━━━━',
+		'  ℹ️  今日已签到，暂无变化',
+	])
+
+
+def test_check_in_notification_shows_balance_reward_change():
+	message = format_check_in_notification({
+		'name': 'Any Router - GuDong',
+		'before_quota': 2760.45,
+		'before_used': 914.55,
+		'after_quota': 2761.45,
+		'after_used': 914.55,
+		'check_in_reward': 1,
+		'usage_increase': 0,
+		'balance_change': 1,
+	})
+
+	assert '     💵 余额: $2760.45 → $2761.45（+$1.00）' in message
+	assert '     📊 累计消耗: $914.55' in message
+	assert '  🎁 签到奖励: +$1.00' in message
+
+
+def test_check_in_notification_shows_reward_and_usage_change():
+	message = format_check_in_notification({
+		'name': 'Any Router - GuDong',
+		'before_quota': 2760.45,
+		'before_used': 914.55,
+		'after_quota': 2761.45,
+		'after_used': 915.05,
+		'check_in_reward': 1.5,
+		'usage_increase': 0.5,
+		'balance_change': 1,
+	})
+
+	assert '     💵 余额: $2760.45 → $2761.45（+$1.00）' in message
+	assert '     📊 累计消耗: $914.55 → $915.05（+$0.50）' in message
+	assert '  🎁 签到奖励: +$1.50  ｜  📉 期间消耗: $0.50' in message

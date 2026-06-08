@@ -327,45 +327,56 @@ def format_check_in_notification(detail: dict) -> str:
 	Returns:
 		格式化后的通知消息
 	"""
+	before_quota = float(detail['before_quota'])
+	before_used = float(detail['before_used'])
+	after_quota = float(detail['after_quota'])
+	after_used = float(detail['after_used'])
+	check_in_reward = float(detail['check_in_reward'])
+	usage_increase = float(detail['usage_increase'])
+	balance_change = float(detail['balance_change'])
+
+	def format_change_line(label: str, before: float, after: float, change: float) -> str:
+		if change != 0:
+			return f'     {label}: ${before:.2f} → ${after:.2f}（{format_signed_money(change)}）'
+		return f'     {label}: ${after:.2f}'
+
 	lines = [
-		f'【签到】**{detail["name"]}**',
+		f'【签到】{detail["name"]}',
 		'  ━━━━━━━━━━━━━━━━━━━━',
-		'  📍 签到前',
-		f'     💵 余额: ${detail["before_quota"]:.2f}  |  📊 累计消耗: ${detail["before_used"]:.2f}',
-		'  📍 签到后',
-		f'     💵 余额: ${detail["after_quota"]:.2f}  |  📊 累计消耗: ${detail["after_used"]:.2f}',
 	]
 
-	# 判断是否有变化
-	has_reward = detail['check_in_reward'] != 0
-	has_usage = detail['usage_increase'] != 0
+	has_reward = check_in_reward != 0
+	has_usage = usage_increase != 0
+	has_balance_change = balance_change != 0
 
-	if has_reward or has_usage:
-		lines.append('  ━━━━━━━━━━━━━━━━━━━━')
-
-		# 已签到但期间有使用
-		if not has_reward and has_usage:
-			lines.append('  ℹ️  今日已签到（期间有消耗）')
-
-		# 签到获得
-		if has_reward:
-			lines.append(f'  🎁 签到奖励: +${detail["check_in_reward"]:.2f}')
-
-		# 期间消耗
-		if has_usage:
-			lines.append(f'  📉 期间消耗: ${detail["usage_increase"]:.2f}')
-
-		# 余额变化
-		if detail['balance_change'] != 0:
-			change_symbol = '+' if detail['balance_change'] > 0 else ''
-			change_emoji = '📈' if detail['balance_change'] > 0 else '📉'
-			lines.append(f'  {change_emoji} 余额变动: {change_symbol}${detail["balance_change"]:.2f}')
-	else:
-		# 无任何变化
+	if not (has_reward or has_usage or has_balance_change):
 		lines.extend([
+			f'     💵 余额: ${after_quota:.2f}  ｜  📊 累计消耗: ${after_used:.2f}',
 			'  ━━━━━━━━━━━━━━━━━━━━',
-			'  ℹ️  今日已签到，暂无变化'
+			'  ℹ️  今日已签到，暂无变化',
 		])
+		return '\n'.join(lines)
+
+	lines.extend([
+		format_change_line('💵 余额', before_quota, after_quota, balance_change),
+		format_change_line('📊 累计消耗', before_used, after_used, usage_increase),
+		'  ━━━━━━━━━━━━━━━━━━━━',
+	])
+
+	if not has_reward and has_usage:
+		lines.append(f'  ℹ️  今日已签到  ｜  📉 期间消耗: ${usage_increase:.2f}')
+	else:
+		status_parts = []
+		if check_in_reward > 0:
+			status_parts.append(f'🎁 签到奖励: {format_signed_money(check_in_reward)}')
+		elif check_in_reward < 0:
+			status_parts.append(f'⚠️ 总额度变化: {format_signed_money(check_in_reward)}')
+		if has_usage:
+			status_parts.append(f'📉 期间消耗: ${usage_increase:.2f}')
+		if not status_parts and has_balance_change:
+			change_emoji = '📈' if balance_change > 0 else '📉'
+			status_parts.append(f'{change_emoji} 余额变动: {format_signed_money(balance_change)}')
+		lines.append(f'  {"  ｜  ".join(status_parts)}')
 
 	return '\n'.join(lines)
 
@@ -397,19 +408,9 @@ def get_trigger_label() -> str:
 	return '本地运行'
 
 
-def format_notification_header(push_reasons: list[str]) -> str:
-	"""格式化通知顶部元信息。"""
-	unique_reasons = list(dict.fromkeys(push_reasons))
-	reason_text = '、'.join(unique_reasons) if unique_reasons else '状态更新'
-	lines = [
-		f'⏰ 执行时间：{get_local_time_str()}',
-		f'🚀 触发方式：{get_trigger_label()}',
-		f'📣 推送原因：{reason_text}',
-	]
-	run_url = get_github_run_url()
-	if run_url:
-		lines.append(f'🔗 运行记录：{run_url}')
-	return '\n'.join(lines)
+def format_notification_header() -> str:
+	"""格式化通知顶部时间信息。"""
+	return f'⏰ 执行时间：{get_local_time_str()}'
 
 
 def format_failure_notification(account_name: str, reason: str | None = None) -> str:
@@ -733,17 +734,7 @@ async def main():
 		save_balance_hash(current_balance_hash)
 
 	if need_notify and (notification_content or failed_notification_content):
-		push_reasons = []
-		if failed_notification_content:
-			push_reasons.append('账号失败')
-		if is_manual_run:
-			push_reasons.append('手动运行')
-		if first_run:
-			push_reasons.append('首次运行')
-		elif balance_changed:
-			push_reasons.append('余额变动')
-
-		sections = [format_notification_header(push_reasons)]
+		sections = [format_notification_header()]
 		if failed_notification_content:
 			sections.append('🚨 异常账号\n' + '\n\n'.join(failed_notification_content))
 		sections.append(format_overall_summary(success_count, total_count, account_check_in_details))
