@@ -48,7 +48,7 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 
 def get_local_time_str() -> str:
 	"""获取北京时间字符串（格式：YYYY-MM-DD HH:MM:SS）"""
-	return datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
+	return datetime.now(BEIJING_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def load_balance_hash():
@@ -158,12 +158,17 @@ async def login_with_credentials(
 	print(f'[PROCESSING] {account_name}: Logging in with email/password...')
 
 	login_url = f'{provider_config.domain}{provider_config.login_path}'
-	settings = load_browser_login_settings(account_name, provider_name)
+	settings = load_browser_login_settings(
+		account_name,
+		provider_name,
+		persist_profile=provider_config.persist_profile,
+	)
 	timeout_ms = settings.wait_timeout_ms
 
 	debug_print(
 		f'[INFO] {account_name}: Browser profile={settings.profile_dir}, '
-		f'headless={settings.headless}, humanize={settings.humanize}, timeout={timeout_ms}ms'
+		f'persist={settings.persist_profile}, headless={settings.headless}, '
+		f'humanize={settings.humanize}, timeout={timeout_ms}ms'
 	)
 
 	print(
@@ -350,18 +355,22 @@ def format_check_in_notification(detail: dict) -> str:
 	has_balance_change = balance_change != 0
 
 	if not (has_reward or has_usage or has_balance_change):
-		lines.extend([
-			f'     💵 余额: ${after_quota:.2f}  ｜  📊 累计消耗: ${after_used:.2f}',
-			'  ━━━━━━━━━━━━━━━━━━━━',
-			'  ℹ️  今日已签到，暂无变化',
-		])
+		lines.extend(
+			[
+				f'     💵 余额: ${after_quota:.2f}  ｜  📊 累计消耗: ${after_used:.2f}',
+				'  ━━━━━━━━━━━━━━━━━━━━',
+				'  ℹ️  今日已签到，暂无变化',
+			]
+		)
 		return '\n'.join(lines)
 
-	lines.extend([
-		format_change_line('💵 余额', before_quota, after_quota, balance_change),
-		format_change_line('📊 累计消耗', before_used, after_used, usage_increase),
-		'  ━━━━━━━━━━━━━━━━━━━━',
-	])
+	lines.extend(
+		[
+			format_change_line('💵 余额', before_quota, after_quota, balance_change),
+			format_change_line('📊 累计消耗', before_used, after_used, usage_increase),
+			'  ━━━━━━━━━━━━━━━━━━━━',
+		]
+	)
 
 	if not has_reward and has_usage:
 		lines.append(f'  ℹ️  今日已签到  ｜  📉 期间消耗: ${usage_increase:.2f}')
@@ -416,11 +425,13 @@ def format_notification_header() -> str:
 def format_failure_notification(account_name: str, reason: str | None = None) -> str:
 	"""格式化失败账号通知。"""
 	failure_reason = (reason or '未知错误').strip()
-	return '\n'.join([
-		f'❌ {account_name}',
-		f'原因：{failure_reason}',
-		'建议：检查 COOKIE / 邮箱密码 / 代理订阅，必要时开启 DEBUG_MODE 查看截图',
-	])
+	return '\n'.join(
+		[
+			f'❌ {account_name}',
+			f'原因：{failure_reason}',
+			'建议：检查 COOKIE / 邮箱密码 / 代理订阅，必要时开启 DEBUG_MODE 查看截图',
+		]
+	)
 
 
 def format_overall_summary(success_count: int, total_count: int, account_details: dict[str, dict]) -> str:
@@ -439,12 +450,14 @@ def format_overall_summary(success_count: int, total_count: int, account_details
 		total_usage = sum(float(detail['usage_increase']) for detail in successful_details)
 		total_balance_change = sum(float(detail['balance_change']) for detail in successful_details)
 		change_emoji = '📈' if total_balance_change >= 0 else '📉'
-		lines.extend([
-			f'💰 总余额：${total_before_quota:.2f} → ${total_after_quota:.2f}',
-			f'🎁 总奖励：{format_signed_money(total_reward)}',
-			f'📉 总消耗：${total_usage:.2f}',
-			f'{change_emoji} 净变化：{format_signed_money(total_balance_change)}',
-		])
+		lines.extend(
+			[
+				f'💰 总余额：${total_before_quota:.2f} → ${total_after_quota:.2f}',
+				f'🎁 总奖励：{format_signed_money(total_reward)}',
+				f'📉 总消耗：${total_usage:.2f}',
+				f'{change_emoji} 净变化：{format_signed_money(total_balance_change)}',
+			]
+		)
 
 	if success_count == total_count:
 		lines.append('🎉 全部账号签到成功！')
@@ -748,7 +761,9 @@ async def main():
 			screenshot_hint = f'📸 已保存 {len(screenshot_paths)} 张调试截图'
 			run_url = get_github_run_url()
 			if github_run_id and run_url:
-				screenshot_hint += f'，可在 GitHub Actions artifact `checkin-screenshots-{github_run_id}` 下载：{run_url}'
+				screenshot_hint += (
+					f'，可在 GitHub Actions artifact `checkin-screenshots-{github_run_id}` 下载：{run_url}'
+				)
 			else:
 				screenshot_hint += '，路径：`checkin_screenshots/`'
 			notify_content += f'\n\n{screenshot_hint}'

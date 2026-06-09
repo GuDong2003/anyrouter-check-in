@@ -152,6 +152,7 @@ class BrowserLoginSettings:
 	wait_timeout_ms: int
 	profile_dir: Path
 	cloakbrowser_binary_path: str | None
+	persist_profile: bool
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -161,7 +162,9 @@ def _env_bool(name: str, default: bool) -> bool:
 	return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def load_browser_login_settings(account_name: str, provider: str) -> BrowserLoginSettings:
+def load_browser_login_settings(
+	account_name: str, provider: str, *, persist_profile: bool = True
+) -> BrowserLoginSettings:
 	profile_base = Path(os.getenv('CHECKIN_BROWSER_PROFILE_DIR', '.browser_profiles'))
 	profile_dir = profile_base / provider / account_name
 	humanize = _env_bool('CHECKIN_HUMANIZE', True)
@@ -173,6 +176,7 @@ def load_browser_login_settings(account_name: str, provider: str) -> BrowserLogi
 		wait_timeout_ms=int(os.getenv('CHECKIN_WAIT_TIMEOUT_MS', str(DEFAULT_TIMEOUT_MS))),
 		profile_dir=profile_dir,
 		cloakbrowser_binary_path=os.getenv('CLOAKBROWSER_BINARY_PATH', '').strip() or None,
+		persist_profile=persist_profile,
 	)
 
 
@@ -181,11 +185,23 @@ def _ensure_binary_path(settings: BrowserLoginSettings) -> None:
 		os.environ['CLOAKBROWSER_BINARY_PATH'] = settings.cloakbrowser_binary_path
 
 
-async def launch_login_context(settings: BrowserLoginSettings, *, use_proxy: bool = False) -> BrowserContext:
-	from cloakbrowser import launch_persistent_context_async
+class _EphemeralBrowserContext:
+	def __init__(self, context: BrowserContext, browser) -> None:
+		self._context = context
+		self._browser = browser
 
+	def __getattr__(self, name: str):
+		return getattr(self._context, name)
+
+	async def close(self, *args, **kwargs) -> None:
+		try:
+			await self._context.close(*args, **kwargs)
+		finally:
+			await self._browser.close()
+
+
+async def launch_login_context(settings: BrowserLoginSettings, *, use_proxy: bool = False) -> BrowserContext:
 	_ensure_binary_path(settings)
-	settings.profile_dir.mkdir(parents=True, exist_ok=True)
 
 	launch_kwargs: dict = {
 		'headless': settings.headless,
@@ -205,7 +221,18 @@ async def launch_login_context(settings: BrowserLoginSettings, *, use_proxy: boo
 	elif use_proxy:
 		print('[WARN] Provider requires proxy but CHECKIN_PROXY_URL is not set')
 
-	return await launch_persistent_context_async(str(settings.profile_dir), **launch_kwargs)
+	if settings.persist_profile:
+		from cloakbrowser import launch_persistent_context_async
+
+		settings.profile_dir.mkdir(parents=True, exist_ok=True)
+		return await launch_persistent_context_async(str(settings.profile_dir), **launch_kwargs)
+
+	from cloakbrowser import launch_async
+
+	context_kwargs = {'viewport': launch_kwargs.pop('viewport')}
+	browser = await launch_async(**launch_kwargs)
+	context = await browser.new_context(**context_kwargs)
+	return _EphemeralBrowserContext(context, browser)
 
 
 def get_screenshot_dir() -> Path:

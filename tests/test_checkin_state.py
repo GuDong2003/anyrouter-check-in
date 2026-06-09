@@ -104,37 +104,43 @@ def test_failure_notification_contains_reason_and_hint():
 
 
 def test_check_in_notification_compacts_no_change():
-	message = format_check_in_notification({
-		'name': 'Any Router - GuDong',
-		'before_quota': 2760.45,
-		'before_used': 914.55,
-		'after_quota': 2760.45,
-		'after_used': 914.55,
-		'check_in_reward': 0,
-		'usage_increase': 0,
-		'balance_change': 0,
-	})
+	message = format_check_in_notification(
+		{
+			'name': 'Any Router - GuDong',
+			'before_quota': 2760.45,
+			'before_used': 914.55,
+			'after_quota': 2760.45,
+			'after_used': 914.55,
+			'check_in_reward': 0,
+			'usage_increase': 0,
+			'balance_change': 0,
+		}
+	)
 
-	assert message == '\n'.join([
-		'【签到】Any Router - GuDong',
-		'  ━━━━━━━━━━━━━━━━━━━━',
-		'     💵 余额: $2760.45  ｜  📊 累计消耗: $914.55',
-		'  ━━━━━━━━━━━━━━━━━━━━',
-		'  ℹ️  今日已签到，暂无变化',
-	])
+	assert message == '\n'.join(
+		[
+			'【签到】Any Router - GuDong',
+			'  ━━━━━━━━━━━━━━━━━━━━',
+			'     💵 余额: $2760.45  ｜  📊 累计消耗: $914.55',
+			'  ━━━━━━━━━━━━━━━━━━━━',
+			'  ℹ️  今日已签到，暂无变化',
+		]
+	)
 
 
 def test_check_in_notification_shows_balance_reward_change():
-	message = format_check_in_notification({
-		'name': 'Any Router - GuDong',
-		'before_quota': 2760.45,
-		'before_used': 914.55,
-		'after_quota': 2761.45,
-		'after_used': 914.55,
-		'check_in_reward': 1,
-		'usage_increase': 0,
-		'balance_change': 1,
-	})
+	message = format_check_in_notification(
+		{
+			'name': 'Any Router - GuDong',
+			'before_quota': 2760.45,
+			'before_used': 914.55,
+			'after_quota': 2761.45,
+			'after_used': 914.55,
+			'check_in_reward': 1,
+			'usage_increase': 0,
+			'balance_change': 1,
+		}
+	)
 
 	assert '     💵 余额: $2760.45 → $2761.45（+$1.00）' in message
 	assert '     📊 累计消耗: $914.55' in message
@@ -142,16 +148,18 @@ def test_check_in_notification_shows_balance_reward_change():
 
 
 def test_check_in_notification_shows_reward_and_usage_change():
-	message = format_check_in_notification({
-		'name': 'Any Router - GuDong',
-		'before_quota': 2760.45,
-		'before_used': 914.55,
-		'after_quota': 2761.45,
-		'after_used': 915.05,
-		'check_in_reward': 1.5,
-		'usage_increase': 0.5,
-		'balance_change': 1,
-	})
+	message = format_check_in_notification(
+		{
+			'name': 'Any Router - GuDong',
+			'before_quota': 2760.45,
+			'before_used': 914.55,
+			'after_quota': 2761.45,
+			'after_used': 915.05,
+			'check_in_reward': 1.5,
+			'usage_increase': 0.5,
+			'balance_change': 1,
+		}
+	)
 
 	assert '     💵 余额: $2760.45 → $2761.45（+$1.00）' in message
 	assert '     📊 累计消耗: $914.55 → $915.05（+$0.50）' in message
