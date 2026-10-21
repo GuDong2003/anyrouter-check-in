@@ -62,7 +62,7 @@ def test_notification_header_only_includes_execution_time(monkeypatch):
 
 
 def test_overall_summary_calculates_totals():
-	details = {
+	details: dict[str, dict] = {
 		'account_1': {
 			'success': True,
 			'before_quota': 10,

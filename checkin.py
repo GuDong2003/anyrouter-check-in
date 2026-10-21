@@ -222,9 +222,12 @@ async def login_with_credentials(
 			return None
 
 		cookies = await context.cookies()
-		all_cookies = {
-			cookie.get('name'): cookie.get('value') for cookie in cookies if cookie.get('name') and cookie.get('value')
-		}
+		all_cookies: dict[str, str] = {}
+		for cookie in cookies:
+			cookie_name = cookie.get('name')
+			cookie_value = cookie.get('value')
+			if cookie_name and cookie_value:
+				all_cookies[cookie_name] = cookie_value
 		api_user = str(user_profile['id']) if user_profile.get('id') is not None else None
 
 		success_msg = f'[SUCCESS] {account_name}: Login successful, got {len(all_cookies)} cookies'
@@ -633,8 +636,8 @@ async def main():
 
 	success_count = 0
 	total_count = len(accounts)
-	notification_content = []
-	failed_notification_content = []
+	notification_content: list[str] = []
+	failed_notification_content: list[str] = []
 	current_balances = {}
 	account_check_in_details = {}
 	need_notify = False

@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from utils.debug import debug_print, is_debug_enabled
 from utils.popups import dismiss_popups, setup_popup_guard
@@ -200,7 +200,9 @@ class _EphemeralBrowserContext:
 			await self._browser.close()
 
 
-async def launch_login_context(settings: BrowserLoginSettings, *, use_proxy: bool = False) -> BrowserContext:
+async def launch_login_context(
+	settings: BrowserLoginSettings, *, use_proxy: bool = False
+) -> BrowserContext | _EphemeralBrowserContext:
 	_ensure_binary_path(settings)
 
 	launch_kwargs: dict = {
@@ -225,7 +227,8 @@ async def launch_login_context(settings: BrowserLoginSettings, *, use_proxy: boo
 		from cloakbrowser import launch_persistent_context_async
 
 		settings.profile_dir.mkdir(parents=True, exist_ok=True)
-		return await launch_persistent_context_async(str(settings.profile_dir), **launch_kwargs)
+		context: BrowserContext = await launch_persistent_context_async(str(settings.profile_dir), **launch_kwargs)
+		return context
 
 	from cloakbrowser import launch_async
 
@@ -295,7 +298,9 @@ async def wait_for_site_ready(page: Page, timeout_ms: int = WAF_READY_TIMEOUT_MS
 		print(f'[INFO] Dismissed {closed} popup dialog(s)')
 
 
-async def _wait_for_optional_load_state(page: Page, state: str, timeout_ms: int) -> bool:
+async def _wait_for_optional_load_state(
+	page: Page, state: Literal['domcontentloaded', 'load', 'networkidle'], timeout_ms: int
+) -> bool:
 	try:
 		await page.wait_for_load_state(state, timeout=timeout_ms)
 		return True

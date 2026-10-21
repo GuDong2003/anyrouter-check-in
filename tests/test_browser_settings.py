@@ -1,7 +1,9 @@
 import sys
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
+from playwright.async_api import BrowserContext
 
 from utils.browser import launch_login_context, load_browser_login_settings
 
@@ -18,7 +20,7 @@ def test_browser_login_settings_records_profile_persistence(monkeypatch, tmp_pat
 @pytest.mark.asyncio
 async def test_launch_login_context_uses_persistent_context_when_enabled(monkeypatch, tmp_path):
 	calls = {}
-	context = SimpleNamespace()
+	context: BrowserContext = MagicMock(spec=BrowserContext)
 
 	async def fake_launch_persistent_context_async(profile_dir, **kwargs):
 		calls['profile_dir'] = profile_dir
@@ -95,6 +97,6 @@ async def test_launch_login_context_closes_browser_for_ephemeral_context(monkeyp
 	context = await launch_login_context(settings)
 	await context.close()
 
-	assert context.closed is True
+	assert browser.context.closed is True
 	assert browser.closed is True
 	assert not settings.profile_dir.exists()
